@@ -25,12 +25,7 @@ class FinancialRAG:
             if not results or not results[0]:
                 return None
             
-            # FIXED: Correctly handle the list of ExpressionAtoms returned by MeTTa.
-            # Each 'item' is an ExpressionAtom like `(MATIC 0.0008)`.
-            # We must use .get_children() to access its contents instead of subscripting.
             best_item = min(results[0], key=lambda item: float(str(item.get_children()[1])))
-            
-            # The best path 'via' currency is the first child of the best item.
             best_path_via = str(best_item.get_children()[0])
             return best_path_via
         except Exception as e:
