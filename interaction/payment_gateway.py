@@ -19,7 +19,7 @@ except Exception as e:
     logging.error(f"Failed to initialize Razorpay client: {e}")
     client = None
 
-def initiate_and_confirm_upi_payment(amount_inr: float, description: str = "Payment Request", timeout_seconds: int = 180) -> dict:
+def initiate_and_confirm_upi_payment(amount_inr: float, description: str = "Payment Request", timeout_seconds: int = 360) -> dict:
 
     if not client:
         return {'status': 'error', 'message': 'Razorpay client not initialized.'}
