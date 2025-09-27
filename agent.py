@@ -57,21 +57,35 @@ if not all([INDIAN_CRYPTO_POOL, INDIAN_BANK_POOL, USA_CRYPTO_POOL, USA_BANK_POOL
     raise ValueError("Pool addresses (INDIAN_CRYPTO_POOL, INDIAN_BANK_POOL, USA_CRYPTO_POOL, USA_BANK_POOL) must be set in .env file.")
 
 # --- Tool Definitions ---
+def multiply(a: float, b: float) -> float:
+    """Simple multiplication tool for calculations."""
+    return a * b
+
 def fetch_and_update_realtime_rates() -> str:
     """
     Fetches the latest currency conversion rates from a simulated external API
     and updates the agent's knowledge graph with this new information.
     """
     print("\n[TOOL LOG] Fetching real-time rates from external API...")
+    eth_inr=0.001
+    eth_usd=0.2
+    inr_matic=0.0000001
+    usd_matic=90
+    
     mock_api_response = {
-        "INR-ETH": 1 / 285000.0, "ETH-USD": 0.00001,
-        "INR-MATIC": 1 / 58.0, "MATIC-USD": 0.72,
+        "INR-ETH": 1 / eth_inr, 
+        "ETH-INR":eth_inr,
+        "ETH-USD": 0.1/eth_usd,
+        "USD-ETH": eth_usd,
+        "INR-MATIC": inr_matic, 
+        "MATIC-INR":1/inr_matic,
+        "USD-MATIC":usd_matic,
+        "MATIC-USD": 0.1/usd_matic,
     }
     for pair, rate in mock_api_response.items():
         from_curr, to_curr = pair.split('-')
         financial_rag.update_rate(from_curr, to_curr, rate)
     return json.dumps({"status": "success", "message": "Knowledge graph updated with latest market rates."})
-
 
 def find_best_conversion_path(from_currency: str, to_currency: str) -> str:
     """Finds the most cost-effective intermediate currency for a conversion using the knowledge graph."""
@@ -102,6 +116,7 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
             # payment_status = json.loads(payment_status_json)
             payment_status = {}
             payment_status["status"] = "success"
+            print("payinr called")
 
             if payment_status.get("status") == "success":
                 return json.dumps({
@@ -111,7 +126,9 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
         
         # Case 2: System moves crypto from Indian pool to US pool
         elif from_currency.upper() == to_currency.upper() and from_address == INDIAN_CRYPTO_POOL:
+            print("send native callled")
             tx_hash = send_native(from_currency, to_address, amount)
+            print(f"[ACTION] Simulating transfer of {amount:.6f} {from_currency} from {INDIAN_CRYPTO_POOL} to {USA_CRYPTO_POOL}. TxHash: {tx_hash}")
             if tx_hash:
                  return json.dumps({
                     "status": "success", "message": f"Cross-border transfer successful. Hash: {tx_hash}",
@@ -120,6 +137,7 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
         
         # Case 3: System "sells" crypto from US pool and pays out USD to merchant
         elif to_currency.upper() == "USD" and from_address == USA_CRYPTO_POOL:
+            print("Final payout called") 
              # This simulates the final payout from our US-based operations
             print(f"[ACTION] Simulating payout of {output_amount:.2f} USD from {USA_BANK_POOL} to merchant {to_address}")
             return json.dumps({
@@ -135,9 +153,9 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
         print(f"[TOOL LOG] {error_message}")
         return json.dumps({"status": "error", "message": error_message})
 
-
 # --- Tool Schemas for the Model ---
 tools_schema = [
+    {"type": "function", "function": {"name": "multiply", "description": "Multiplies two numbers.", "parameters": {"type": "object", "properties": {"a": {"type": "number"}, "b": {"type": "number"}}, "required": ["a", "b"]}}},
     {"type": "function", "function": {"name": "fetch_and_update_realtime_rates", "description": "Use this tool first to get the latest market conversion rates before making any decisions.", "parameters": {"type": "object", "properties": {}, "required": []}}},
     {"type": "function", "function": {"name": "find_best_conversion_path", "description": "After getting rates, use this to find the cheapest crypto path between two fiat currencies.", "parameters": {"type": "object", "properties": {"from_currency": {"type": "string", "description": "The source currency code (e.g., 'INR')."}, "to_currency": {"type": "string", "description": "The final target currency code (e.g., 'USD')."}}, "required": ["from_currency", "to_currency"]}}},
     {"type": "function", "function": {"name": "convert_and_transfer", "description": "Executes a single conversion and transfer step. Use this for each leg of the journey.", "parameters": {"type": "object", "properties": {"from_currency": {"type": "string", "description": "The source currency for this step (e.g., 'INR', 'ETH')."}, "to_currency": {"type": "string", "description": "The target currency for this step (e.g., 'ETH', 'USD')."}, "from_address": {"type": "string", "description": "Sender's account identifier for this step."}, "to_address": {"type": "string", "description": "Receiver's account identifier for this step."}, "amount": {"type": "number", "description": "The amount in the source currency."}}, "required": ["from_currency", "to_currency", "from_address", "to_address", "amount"]}}}
@@ -153,6 +171,7 @@ def process_request(messages: list, session_id: str) -> list:
         "fetch_and_update_realtime_rates": fetch_and_update_realtime_rates,
         "find_best_conversion_path": find_best_conversion_path,
         "convert_and_transfer": convert_and_transfer,
+        "multiply": multiply
     }
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json", "X-Session-Id": session_id}
 
@@ -212,7 +231,7 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
 
     session_id = str(uuid.uuid4())
     messages = [
-        {"role": "system", "content": f"You are an intelligent financial agent and you are not allowed to ask questions from user. Your goal is to execute a currency conversion from INR to USD. You MUST follow this plan: 1. `fetch_and_update_realtime_rates`. 2. `find_best_conversion_path`. 3. Reason about the required amounts and create a 3-step execution plan using `convert_and_transfer` for each leg: a) User INR payment to the Indian pool address '{INDIAN_BANK_POOL}'. b) A crypto transfer from the Indian pool '{INDIAN_CRYPTO_POOL}' to the US pool '{USA_CRYPTO_POOL}'. c) A final USD payout from the US pool '{USA_CRYPTO_POOL}' to the merchant. Execute this plan until the final payment is made, then give a summary."},
+        {"role": "system", "content": f"You are an intelligent financial agent and don't ask confirmations. Your goal is to execute a currency conversion from INR to USD. You MUST follow this plan: 1. `fetch_and_update_realtime_rates`. 2. `find_best_conversion_path`. 3. Reason about the required amounts and create a 3-step execution plan using `convert_and_transfer` for each leg: a) User INR payment to the Indian pool address '{INDIAN_BANK_POOL}'. b) A crypto transfer from the Indian pool '{INDIAN_CRYPTO_POOL}' to the US pool '{USA_CRYPTO_POOL}' by calling the tool convert_and_transfer. c) A final USD payout from the US pool '{USA_CRYPTO_POOL}' to the merchant. Execute this plan until the final payment is made, then give a summary."},
         {"role": "user", "content": user_query}
     ]
     
@@ -247,7 +266,7 @@ def run_standalone_conversation():
     session_id = str(uuid.uuid4())
     messages = [
         {"role": "system", "content": f"You are an intelligent financial agent. Your goal is to execute a currency conversion from INR to USD. You MUST follow this plan: 1. `fetch_and_update_realtime_rates`. 2. `find_best_conversion_path`. 3. Reason about the required amounts and create a 3-step execution plan using `convert_and_transfer` for each leg: a) User INR payment to the Indian bank account '{INDIAN_BANK_POOL}'. b) A crypto transfer from the Indian pool '{INDIAN_CRYPTO_POOL}' to the US pool '{USA_CRYPTO_POOL}'. c) A final USD payout from the US pool '{USA_CRYPTO_POOL}' to the merchant. Execute this plan until the final payment is made, then give a summary."},
-        {"role": "user", "content": "I need to pay a US merchant $1 from my Indian account '0xIndianAccount'. The merchant's account is '0xUSMerchant'. Please find the cheapest way to do this and handle the transaction."}
+        {"role": "user", "content": "I need to pay a US merchant $0.1 from my Indian account '0xIndianAccount'. The merchant's account is '0xUSMerchant'. Please find the cheapest way to do this and handle the transaction."}
     ]
     max_turns = 10 # Increased max turns for the 3-step execution
     for turn in range(max_turns):
@@ -268,10 +287,4 @@ def run_standalone_conversation():
 if __name__ == "__main__":
     # To test the agent logic without running the uAgent server
     run_standalone_conversation()
-
-    # To run the actual agent, you would typically use a separate runner file or command
-    # For example:
-    # bureau = Bureau(endpoint="http://127.0.0.1:8000/submit", port=8000)
-    # bureau.add(agent)
-    # bureau.run()
 
