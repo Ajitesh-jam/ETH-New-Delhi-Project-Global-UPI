@@ -5,6 +5,7 @@ updating its knowledge graph and reasoning over it to complete a transaction.
 import os
 import json
 import requests
+from payment_gateway import pay_inr
 import dotenv
 import uuid
 from hyperon import MeTTa
@@ -54,6 +55,16 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
     if rate is None: return json.dumps({"status": "error", "message": f"No rate found for {from_currency}->{to_currency}."})
     output_amount = amount * rate
     print(f"\n[TOOL LOG] Converting {amount:.2f} {from_currency} to {output_amount:.6f} {to_currency}...")
+    
+    
+    status = pay_inr(from_currency, to_currency, from_address, to_address, amount)
+    if status:
+        print(f"\n[TOOL LOG] Payment status: {status}")
+        # If payment is successful, proceed with the conversion
+        if status.get("status") == "success":
+            print(f"\n[TOOL LOG] Payment successful: {status}")
+        else:
+            print(f"\n[TOOL LOG] Payment failed: {status}")
     return json.dumps({"status": "success", "amount_in": amount, "amount_out": output_amount})
 
 # --- Tool Schemas for the Model ---
