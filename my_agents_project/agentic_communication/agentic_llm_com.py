@@ -71,7 +71,8 @@ def poll_for_async_reply(conv_id: str, history: list[dict], *, wait_sec: int = 5
 if __name__ == "__main__":
     conv_id = str(uuid.uuid4())
     history: list[dict] = [
-        {"role": "user", "content": "is there any model that i can use to fetch crypto prices?"}
+        {"role": "user", "content": "ask the agent of at address: agent1qwrcq6kwddq6sda3c64qw7wkcz6q6de9e9k5zm2fs6pgpefsyjuej5sayrq and ask What are the best crypto buy signals today?"}
+        
     ]
 
     # First request – stream tokens so the user sees progress immediately

@@ -15,15 +15,114 @@ from uagents.setup import fund_agent_if_low
 import asyncio
 import threading
 import sys
+import json
+from datetime import datetime
+from pathlib import Path
 import dotenv           
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # ============================================================================
+# LOCAL DATA STORAGE SETUP
+# ============================================================================
+# Create data directory for storing conversation logs
+DATA_DIR = Path(__file__).parent / "data_logs"
+DATA_DIR.mkdir(exist_ok=True)
+
+# File paths for different types of data
+QUESTIONS_FILE = DATA_DIR / "questions_log.jsonl"
+RESPONSES_FILE = DATA_DIR / "responses_log.jsonl"
+CONVERSATION_FILE = DATA_DIR / "conversation_history.jsonl"
+DAILY_SUMMARY_FILE = DATA_DIR / f"daily_summary_{datetime.now().strftime('%Y%m%d')}.json"
+
+def save_to_jsonl(file_path: Path, data: dict):
+    """Save data to JSONL file (one JSON object per line)"""
+    with open(file_path, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(data, ensure_ascii=False) + '\n')
+
+def save_question(question: str, timestamp: datetime = None):
+    """Save user question to local storage"""
+    if timestamp is None:
+        timestamp = datetime.now()
+    
+    question_data = {
+        "timestamp": timestamp.isoformat(),
+        "type": "question",
+        "content": question,
+        "user": "human"
+    }
+    
+    save_to_jsonl(QUESTIONS_FILE, question_data)
+    save_to_jsonl(CONVERSATION_FILE, question_data)
+    print(f"📝 Question saved to: {QUESTIONS_FILE}")
+
+def save_response(response: str, success: bool, error: str = None, timestamp: datetime = None):
+    """Save AI response to local storage"""
+    if timestamp is None:
+        timestamp = datetime.now()
+    
+    response_data = {
+        "timestamp": timestamp.isoformat(),
+        "type": "response",
+        "content": response,
+        "success": success,
+        "error": error,
+        "source": "token_metrics_ai"
+    }
+    
+    save_to_jsonl(RESPONSES_FILE, response_data)
+    save_to_jsonl(CONVERSATION_FILE, response_data)
+    print(f"💾 Response saved to: {RESPONSES_FILE}")
+
+def save_daily_summary():
+    """Save a daily summary of conversation stats"""
+    try:
+        if not CONVERSATION_FILE.exists():
+            return
+            
+        # Read all conversation data for today
+        today = datetime.now().strftime('%Y-%m-%d')
+        conversations = []
+        
+        with open(CONVERSATION_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    data = json.loads(line.strip())
+                    if data['timestamp'].startswith(today):
+                        conversations.append(data)
+                except json.JSONDecodeError:
+                    continue
+        
+        # Calculate stats
+        questions = [c for c in conversations if c['type'] == 'question']
+        responses = [c for c in conversations if c['type'] == 'response']
+        successful_responses = [r for r in responses if r['success']]
+        
+        summary = {
+            "date": today,
+            "total_questions": len(questions),
+            "total_responses": len(responses),
+            "successful_responses": len(successful_responses),
+            "success_rate": len(successful_responses) / len(responses) if responses else 0,
+            "topics_discussed": [q['content'][:50] + "..." if len(q['content']) > 50 else q['content'] for q in questions[-5:]],  # Last 5 questions
+            "last_updated": datetime.now().isoformat()
+        }
+        
+        with open(DAILY_SUMMARY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(summary, f, indent=2, ensure_ascii=False)
+            
+        print(f"📊 Daily summary saved to: {DAILY_SUMMARY_FILE}")
+        
+    except Exception as e:
+        print(f"⚠️ Error saving daily summary: {e}")
+
+# ============================================================================
 # CONFIGURATION - Only need Token Metrics API key now
 # ============================================================================
 TOKENMETRICS_API_KEY = os.getenv('TOKENMETRICS_API_KEY')
+print( "Keyy:")
+print( TOKENMETRICS_API_KEY)
 TOKENMETRICS_AGENT_ADDRESS = "agent1qwrcq6kwddq6sda3c64qw7wkcz6q6de9e9k5zm2fs6pgpefsyjuej5sayrq"
 
 # ============================================================================  
@@ -64,9 +163,15 @@ async def handle_crypto_response(ctx: Context, sender: str, msg: CryptoAnswer):
     if msg.success:
         latest_response = msg.response
         print(f"🤖 Token Metrics AI: {msg.response}\n", flush=True)
+        
+        # Save successful response to local storage
+        save_response(msg.response, True)
     else:
         latest_response = f"Error: {msg.error}"
         print(f"❌ Error: {msg.error}\n", flush=True)
+        
+        # Save error response to local storage
+        save_response(msg.error or "Unknown error", False, msg.error)
     
     # Signal that response was received
     response_received.set()
