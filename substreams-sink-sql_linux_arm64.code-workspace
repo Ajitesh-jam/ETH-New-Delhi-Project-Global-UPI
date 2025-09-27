@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "substreams-sink-sql_linux_arm64",
+			"path": "../../Downloads/substreams-sink-sql_linux_arm64"
+		},
+		{
+			"name": "ETH-New-Delhi-Project-Global-UPI",
+			"path": "."
+		}
+	],
+	"settings": {}
+}
