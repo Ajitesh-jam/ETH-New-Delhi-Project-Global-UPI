@@ -13,6 +13,22 @@ from hyperon import MeTTa
 from knowledge import initialize_financial_knowledge_graph
 from financerag import FinancialRAG
 
+from uagents import Agent, Context, Protocol, Bureau
+from uagents.setup import fund_agent_if_low
+
+# Import the Chat Protocol components
+from uagents_core.contrib.protocols.chat import (
+    ChatAcknowledgement,
+    ChatMessage,
+    EndSessionContent,
+    TextContent,
+    chat_protocol_spec,
+)
+
+# Import our knowledge graph and RAG modules
+from knowledge import initialize_financial_knowledge_graph
+from financerag import FinancialRAG
+
 # --- Initialization ---
 dotenv.load_dotenv()
 metta = MeTTa()
@@ -77,7 +93,7 @@ def run_conversation():
     messages = [
         {"role": "system", "content": "You are an intelligent financial agent. Your goal is to execute a currency conversion from INR to USD. You MUST follow this plan: 1. Call `fetch_and_update_realtime_rates` to get current data. 2. Call `find_best_conversion_path` to choose the optimal route. 3. Create a plan to call `convert_and_transfer` for each leg of the journey (e.g., INR->best_path, and best_path->USD). You must reason about the amounts for each step."},
 
-        {"role": "user", "content": "I need to pay a US merchant $1200 from my Indian account '0xIndianAccount'. The merchant's account is '0xUSMerchant'. Please find the cheapest way to do this and handle the transaction. Remember to update your knowledge with the latest rates first! Also help me do the transaction like from the best path convert my inr to cheaptest crypto and given buy usd from crypto and send in to merchant"}
+        {"role": "user", "content": "I need to pay a US merchant $12 from my Indian account '0xIndianAccount'. The merchant's account is '0xUSMerchant'. Please find the cheapest way to do this and handle the transaction. Remember to update your knowledge with the latest rates first! Also help me do the transaction like from the best path convert my inr to cheaptest crypto and given buy usd from crypto and send in to merchant"}
     ]
     
     available_tools = {

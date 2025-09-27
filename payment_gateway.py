@@ -131,17 +131,13 @@ class RazorpayGateway:
         
         
 
-def pay_inr(from_currency: str, to_currency: str, from_address: str, to_address: str, amount: float) -> str:
+def pay_inr(from_address: str, to_address: str, amount: float) -> str:
+    
     """
     Initiates a payment for a transaction, waits for confirmation, and then simulates a transfer.
     This function is designed to be used as a tool by an AI agent.
     """
-    # For Razorpay, the payment must be in INR.
-    if from_currency.upper() != 'INR':
-        return json.dumps({
-            "status": "error",
-            "message": f"Payment failed. Razorpay gateway only supports payments in INR, but from_currency was {from_currency}."
-        })
+
 
     # 1. Initialize the gateway
     gateway = RazorpayGateway()
@@ -153,7 +149,7 @@ def pay_inr(from_currency: str, to_currency: str, from_address: str, to_address:
 
     # 2. Initiate the payment to get the URL
     logging.info(f"Initiating payment of INR {amount:.2f} for transfer to {to_address}")
-    initiation_result = gateway.initiate_payment(amount_inr=amount, description=f"Payment for {amount} {from_currency} to {to_currency}")
+    initiation_result = gateway.initiate_payment(amount_inr=amount, description=f"Payment initiated !!!")
 
     if initiation_result['status'] != 'success':
         return json.dumps({
@@ -202,7 +198,7 @@ def pay_inr(from_currency: str, to_currency: str, from_address: str, to_address:
         })
 
     # 5. If payment is confirmed, simulate the transfer
-    print(f"\n[TOOL LOG] Payment confirmed. Simulating transfer of {amount:.2f} {from_currency} to {to_currency} for address {to_address}...")
+    print(f"\n[TOOL LOG] Payment confirmed. Simulating transfer of {amount:.2f}  for address {to_address}...")
     
     return json.dumps({
         "status": "success",
@@ -212,8 +208,8 @@ def pay_inr(from_currency: str, to_currency: str, from_address: str, to_address:
         "transfer_details": {
             "from": from_address,
             "to": to_address,
-            "from_currency": from_currency,
-            "to_currency": to_currency,
+            "from_currency": "INR",
+            "to_currency": "INR",
             "amount_in": amount
         }
     })
