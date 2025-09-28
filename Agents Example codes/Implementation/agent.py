@@ -83,6 +83,7 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
             print(f"\n[TOOL LOG] Payment failed: {status}")
     return json.dumps({"status": "success", "amount_in": amount, "amount_out": output_amount})
 
+
 # --- Tool Schemas for the Model ---
 update_rates_func = {"type": "function","function": {"name": "fetch_and_update_realtime_rates","description": "Use this tool first to get the latest market conversion rates before making any decisions.","parameters": {"type": "object","properties": {},"required": []}}}
 find_best_path_func = {"type": "function","function": {"name": "find_best_conversion_path","description": "After getting rates, use this tool to find the cheapest conversion path.","parameters": {"type": "object","properties": {"from_currency": {"type": "string","description": "The source currency code (e.g., 'INR')."},"to_currency": {"type": "string","description": "The final target currency code (e.g., 'USD')."}},"required": ["from_currency", "to_currency"]}}}

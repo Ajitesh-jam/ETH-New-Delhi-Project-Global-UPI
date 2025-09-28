@@ -8,10 +8,6 @@ import json
 import uuid
 import requests
 from datetime import datetime
-import cv2
-from pyzbar.pyzbar import decode
-import json
-import time
 
 # --- Placeholder Imports for Custom Modules ---
 from payment_gateway import pay_inr
@@ -91,166 +87,6 @@ def fetch_and_update_realtime_rates() -> str:
         financial_rag.update_rate(from_curr, to_curr, rate)
     return json.dumps({"status": "success", "message": "Knowledge graph updated with latest market rates."})
 
-
-import cv2
-from pyzbar.pyzbar import decode
-import json
-import time
-import numpy as np
-
-def discover_expert_agent(task_description: str) -> str:
-    """
-    Finds a specialized agent on the Agentverse to answer a complex question and polls for its reply.
-    Use this for tasks requiring external knowledge, like market analysis or predictions.
-    """
-    print(f"\n[TOOL LOG] Starting discovery for task: '{task_description}'...")
-
-    # This simulates the async polling logic from the provided script
-    conv_id = str(uuid.uuid4())
-    history: list[dict] = [
-        {"role": "user", "content": task_description}
-    ]
-
-    # Nested function to simulate the `ask` functionality
-    def ask_agent_network(messages: list[dict]) -> str:
-        headers = {
-            "Authorization": f"Bearer {API_KEY}",
-            "x-session-id": conv_id,
-            "Content-Type": "application/json",
-        }
-        # NOTE: Using the 'asi1-fast-agentic' model as specified in the polling script for this tool
-        payload = {"model": "asi1-fast-agentic", "messages": messages, "stream": False}
-        print("Polling expert agent network...")
-        resp = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=payload, timeout=90)
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-
-    # First request
-    first_reply = ask_agent_network(history)
-    history.append({"role": "assistant", "content": first_reply})
-
-    # Polling logic
-    if "I've sent the message" in first_reply or "I've delegated" in first_reply:
-        print("Initial response indicates delegation. Starting to poll...")
-        time.sleep(5) # Initial wait
-        update_prompt = {"role": "user", "content": "Any update?"}
-        final_reply = ask_agent_network(history + [update_prompt])
-        if final_reply and final_reply.strip() != first_reply.strip():
-            print(f"Received final reply from expert agent: {final_reply}")
-            return json.dumps({"status": "success", "expert_opinion": final_reply})
-        else:
-            return json.dumps({"status": "pending", "message": "Expert agent is still processing the request."})
-    
-    return json.dumps({"status": "success", "expert_opinion": first_reply})
-
-
-def upi_scan_and_prepare_prompt() -> str:
-    """
-    Opens the local webcam, specifically scans for a QR Code, draws a bounding
-    box for confirmation, and then collects user details to generate a complete
-    transaction prompt for the AI to execute.
-    """
-    print("\n[TOOL LOG] UPI Payment Initiated. Please follow the steps.")
-    print("---------------------------------------------------------")
-    print("ACTION REQUIRED: Opening camera to scan recipient's UPI QR code.")
-    print("Please show the QR code to the camera. The window will close automatically upon detection.")
-
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        error_msg = "Error: Could not open camera. Please ensure it is connected and not in use."
-        print(f"❌ {error_msg}")
-        return json.dumps({"status": "error", "message": error_msg})
-
-    qr_data = None
-    qr_detected = False
-    
-    # Loop until a QR code is found or the user quits
-    while not qr_detected:
-        success, frame = cap.read()
-        if not success:
-            print("Warning: Could not read frame from camera.")
-            time.sleep(0.5)
-            continue
-        try:
-            decoded_objects = decode(frame)
-            for obj in decoded_objects:
-                if obj.type == 'QRCODE':
-                    qr_data = obj.data.decode('utf-8')
-                    print("QR Code detected! Displaying for confirmation...")
-                    points = obj.polygon
-                    if len(points) > 4:
-                        hull = cv2.convexHull(np.array([point for point in points], dtype=np.float32))
-                        cv2.polylines(frame, [hull], True, (0, 255, 0), 3)
-                    else:
-                        pts = np.array(points, np.int32)
-                        pts = pts.reshape((-1,1,2))
-                        cv2.polylines(frame,[pts],True,(0,255,0), 3)
-                    qr_detected = True
-                    cv2.imshow("UPI QR Code Scanner (Press 'q' to cancel)", frame)
-                    cv2.waitKey(2000) 
-                    break 
-        except Exception:
-            # Ignore potential decoding errors on blurry frames
-            pass
-
-        if qr_detected:
-            break # Exit the while loop
-
-        # Display the live camera feed
-        cv2.imshow("UPI QR Code Scanner (Press 'q' to cancel)", frame)
-
-        # Allow user to quit by pressing 'q'
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            print("INFO: Camera closed by user.")
-            break
-    
-    # Release the camera and close all windows
-    cap.release()
-    cv2.destroyAllWindows()
-
-    if not qr_data:
-        error_msg = "Error: No QR code was successfully detected or the process was cancelled."
-        print(f"{error_msg}")
-        return json.dumps({"status": "error", "message": error_msg})
-
-    print("QR code data captured successfully.", qr_data)
-    # --- Process the captured QR data ---
-    try:
-        # qr_data={"type":"receive","accountNumber":"45612215663","ifscCode":"Ib8886","accountHolderName":"Neelansh","bankName":"","timestamp":"2025-09-27T23:07:16.841Z"} is like above 
-        scanned_data = json.loads(qr_data)
-        
-        receiver_details = (
-            f"Receiver Name: {scanned_data.get('accountHolderName', 'N/A')}, "
-            f"Account: {scanned_data.get('accountNumber', 'N/A')}, "
-            f"IFSC: {scanned_data.get('ifscCode', 'N/A')}, "
-            f"Bank: {scanned_data.get('bankName', 'N/A')}"
-        )
-        print(f"Recipient details captured: {receiver_details}")
-    except Exception as e:
-        error_msg = f"Failed to parse QR data. Please ensure it's a valid JSON QR code. Error: {e}"
-        print(f"{error_msg}")
-        return json.dumps({"status": "error", "message": error_msg})
-
-    # --- Collect sender details from the terminal ---
-    print("\nACTION REQUIRED: Please enter your (sender) account details.")
-    try:
-        amount = input("Amount in INR to send > ")
-        final_prompt = (
-            f"I want to transfer {amount} INR from my Indian account to a US merchant. The recipient's details are: {receiver_details}. "
-            f"Please find the cheapest way to do this and handle the entire transaction."
-        )
-        print("Sender details captured. Assembling final prompt...")
-        print("---------------------------------------------------------")
-        return json.dumps({
-            "status": "success",
-            "message": "Successfully generated the transaction prompt.",
-            "final_prompt": final_prompt
-        })
-    except Exception as e:
-        error_msg = f"Failed to capture sender details. Error: {e}"
-        print(f" {error_msg}")
-        return json.dumps({"status": "error", "message": error_msg})
-    
 def find_best_conversion_path(from_currency: str, to_currency: str) -> str:
     """Finds the most cost-effective intermediate currency for a conversion using the knowledge graph."""
     print(f"\n[TOOL LOG] Finding best path from {from_currency} to {to_currency}...")
@@ -275,11 +111,11 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
     try:
         # Case 1: User pays INR to the Indian pool
         if from_currency.upper() == "INR":
-            payment_status_json = pay_inr(from_address=from_address, to_address=to_address, amount=amount)
-            payment_status = json.loads(payment_status_json)
-            # payment_status = {}
-            # payment_status["status"] = "success"
-            # print("payinr called")
+            # payment_status_json = pay_inr(from_address=from_address, to_address=to_address, amount=amount)
+            # payment_status = json.loads(payment_status_json)
+            payment_status = {}
+            payment_status["status"] = "success"
+            print("payinr called")
 
             if payment_status.get("status") == "success":
                 return json.dumps({
@@ -304,13 +140,13 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
             print(f"[ACTION] Simulating payout of {output_amount:.2f} USD from {USA_BANK_POOL} to merchant {to_address}")
             
             # since we don't have a US based Account, we will just request ourself for the payment to Merchant
-            payment_status = {}
-            payment_status["status"] = "success"
-            print("USD payout called")
+            payment_status_json = pay_inr(from_address=from_address, to_address=to_address, amount=amount)
+            payment_status = json.loads(payment_status_json)
+            print("payinr called")
 
             if payment_status.get("status") == "success":
                 return json.dumps({
-                    "status": "success", "message": "User USD payout successful.",
+                    "status": "success", "message": "User INR payment successful.",
                     "amount_in": amount, "amount_out": output_amount, "details": payment_status
                 })
             return json.dumps({
@@ -327,12 +163,10 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
 
 # --- Tool Schemas for the Model ---
 tools_schema = [
-    {"type": "function", "function": {"name": "upi_scan_and_prepare_prompt", "description": "Use this first when a user wants to make a UPI payment. It simulates scanning a QR code and gathers sender/receiver details to create a detailed transaction request.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "multiply", "description": "Multiplies two numbers.", "parameters": {"type": "object", "properties": {"a": {"type": "number"}, "b": {"type": "number"}}, "required": ["a", "b"]}}},
     {"type": "function", "function": {"name": "fetch_and_update_realtime_rates", "description": "Use this tool first to get the latest market conversion rates before making any decisions.", "parameters": {"type": "object", "properties": {}, "required": []}}},
     {"type": "function", "function": {"name": "find_best_conversion_path", "description": "After getting rates, use this to find the cheapest crypto path between two fiat currencies.", "parameters": {"type": "object", "properties": {"from_currency": {"type": "string", "description": "The source currency code (e.g., 'INR')."}, "to_currency": {"type": "string", "description": "The final target currency code (e.g., 'USD')."}}, "required": ["from_currency", "to_currency"]}}},
-    {"type": "function", "function": {"name": "convert_and_transfer", "description": "Executes a single conversion and transfer step. Use this for each leg of the journey.", "parameters": {"type": "object", "properties": {"from_currency": {"type": "string", "description": "The source currency for this step (e.g., 'INR', 'ETH')."}, "to_currency": {"type": "string", "description": "The target currency for this step (e.g., 'ETH', 'USD')."}, "from_address": {"type": "string", "description": "Sender's account identifier for this step."}, "to_address": {"type": "string", "description": "Receiver's account identifier for this step."}, "amount": {"type": "number", "description": "The amount in the source currency."}}, "required": ["from_currency", "to_currency", "from_address", "to_address", "amount"]}}},
-    {"type": "function", "function": {"name": "discover_expert_agent", "description": "Finds and queries an expert agent for complex, non-financial tasks like market analysis or predictions.", "parameters": {"type": "object", "properties": {"task_description": {"type": "string", "description": "A clear and concise description of the task for the expert agent."}}, "required": ["task_description"]}}},
+    {"type": "function", "function": {"name": "convert_and_transfer", "description": "Executes a single conversion and transfer step. Use this for each leg of the journey.", "parameters": {"type": "object", "properties": {"from_currency": {"type": "string", "description": "The source currency for this step (e.g., 'INR', 'ETH')."}, "to_currency": {"type": "string", "description": "The target currency for this step (e.g., 'ETH', 'USD')."}, "from_address": {"type": "string", "description": "Sender's account identifier for this step."}, "to_address": {"type": "string", "description": "Receiver's account identifier for this step."}, "amount": {"type": "number", "description": "The amount in the source currency."}}, "required": ["from_currency", "to_currency", "from_address", "to_address", "amount"]}}}
 ]
 
 # --- Stateful Conversation Class ---
@@ -341,15 +175,13 @@ class StatefulAgentConversation:
     def __init__(self):
         self.session_id = str(uuid.uuid4())
         self.messages = [
-            {"role": "system", "content": f"You are an intelligent financial agent that executes tasks without asking for confirmation. Your goal is to execute currency conversions. You MUST follow this plan: 1. `fetch_and_update_realtime_rates`. 2. `find_best_conversion_path`. 3. Reason about amounts and create a 3-step execution plan using `convert_and_transfer` for each leg: a) User INR payment to the Indian bank '{INDIAN_BANK_POOL}' ,just call the tool convert transaction tool. b) A crypto transfer from the Indian crypto pool '{INDIAN_CRYPTO_POOL}' to the US crypto pool '{USA_CRYPTO_POOL}'. c) A final USD payout from the US bank pool '{USA_BANK_POOL}' to the merchant just call tool convert_and_transfer it will do it and will be successfull. Execute the full plan, then give a summary. If any step fails after user payment, refund the user from '{INDIAN_BANK_POOL}'."}
+            {"role": "system", "content": f"You are an intelligent financial agent that executes tasks without asking for confirmation. Your goal is to execute currency conversions. You MUST follow this plan: 1. `fetch_and_update_realtime_rates`. 2. `find_best_conversion_path`. 3. Reason about amounts and create a 3-step execution plan using `convert_and_transfer` for each leg: a) User INR payment to the Indian bank '{INDIAN_BANK_POOL}'. b) A crypto transfer from the Indian crypto pool '{INDIAN_CRYPTO_POOL}' to the US crypto pool '{USA_CRYPTO_POOL}'. c) A final USD payout from the US bank pool '{USA_BANK_POOL}' to the merchant. Execute the full plan, then give a summary. If any step fails after user payment, refund the user from '{INDIAN_BANK_POOL}'."}
         ]
         self.available_tools = {
             "fetch_and_update_realtime_rates": fetch_and_update_realtime_rates,
             "find_best_conversion_path": find_best_conversion_path,
             "convert_and_transfer": convert_and_transfer,
-            "multiply": multiply,
-            "upi_scan_and_prepare_prompt": upi_scan_and_prepare_prompt,
-            "discover_expert_agent": discover_expert_agent,
+            "multiply": multiply
         }
 
     def process_request(self):
@@ -370,13 +202,6 @@ class StatefulAgentConversation:
                     args = json.loads(call["function"].get("arguments", "{}"))
                     tool_to_call = self.available_tools.get(func_name)
                     result = tool_to_call(**args) if tool_to_call else json.dumps({"status": "error", "message": f"Unknown tool: {func_name}"})
-                    if func_name == 'upi_scan_and_prepare_prompt':
-                        result_data = json.loads(result)
-                        if result_data.get('status') == 'success':
-                            new_prompt = result_data.get('final_prompt')
-                            print(f"New prompt generated by UPI tool: '{new_prompt}'")
-                            # Replace the user message with the detailed one from the tool
-                            self.messages[-2]['content'] = new_prompt
                     tool_outputs.append({"tool_call_id": call["id"], "role": "tool", "name": func_name, "content": str(result)})
                 self.messages.extend(tool_outputs)
         except requests.exceptions.HTTPError as e:
@@ -426,7 +251,7 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage):
     for turn in range(max_turns):
         ctx.logger.info(f"--- Agent Turn {turn + 1} ---")
         messages = process_request(messages, session_id)
-
+        
         # Add a check to ensure messages is not None before proceeding
         if messages is None:
             ctx.logger.error("process_request returned None. Aborting turn.")
