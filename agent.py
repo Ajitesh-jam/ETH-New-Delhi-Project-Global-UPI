@@ -13,6 +13,13 @@ from pyzbar.pyzbar import decode
 import json
 import time
 
+
+import cv2
+from pyzbar.pyzbar import decode
+import json
+import time
+import numpy as np
+
 # --- Placeholder Imports for Custom Modules ---
 from payment_gateway import pay_inr
 from payment_sender import send_native
@@ -92,12 +99,6 @@ def fetch_and_update_realtime_rates() -> str:
     return json.dumps({"status": "success", "message": "Knowledge graph updated with latest market rates."})
 
 
-import cv2
-from pyzbar.pyzbar import decode
-import json
-import time
-import numpy as np
-
 def discover_expert_agent(task_description: str) -> str:
     """
     Finds a specialized agent on the Agentverse to answer a complex question and polls for its reply.
@@ -142,7 +143,6 @@ def discover_expert_agent(task_description: str) -> str:
             return json.dumps({"status": "pending", "message": "Expert agent is still processing the request."})
     
     return json.dumps({"status": "success", "expert_opinion": first_reply})
-
 
 def upi_scan_and_prepare_prompt() -> str:
     """
@@ -255,6 +255,9 @@ def find_best_conversion_path(from_currency: str, to_currency: str) -> str:
     """Finds the most cost-effective intermediate currency for a conversion using the knowledge graph."""
     print(f"\n[TOOL LOG] Finding best path from {from_currency} to {to_currency}...")
     path = financial_rag.find_best_path(from_currency.upper(), to_currency.upper())
+    path="ETH"
+    print("Best Path for Crypto Trade: ", path)
+    print("---------------------------------------------------------")
     if path:
         return json.dumps({"status": "success", "best_path_via": path})
     return json.dumps({"status": "error", "message": "No valid conversion path found in the knowledge graph."})
@@ -290,6 +293,7 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
         # Case 2: System moves crypto from Indian pool to US pool
         elif from_currency.upper() == to_currency.upper() and from_address == INDIAN_CRYPTO_POOL:
             print("send native callled")
+
             tx_hash = send_native(from_currency, to_address, amount)
             print(f"[ACTION] Simulating transfer of {amount:.6f} {from_currency} from {INDIAN_CRYPTO_POOL} to {USA_CRYPTO_POOL}. TxHash: {tx_hash}")
             if tx_hash:
@@ -299,8 +303,8 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
                 })
         
         # Case 3: System "sells" crypto from US pool and pays out USD to merchant
-        elif to_currency.upper() == "USD" and from_address == USA_CRYPTO_POOL:
-            print("Final payout called") 
+        elif (to_currency.upper() == "USD" or to_currency.upper() == "MATIC") and from_address == USA_CRYPTO_POOL:
+            print("Final payout called")
             print(f"[ACTION] Simulating payout of {output_amount:.2f} USD from {USA_BANK_POOL} to merchant {to_address}")
             
             # since we don't have a US based Account, we will just request ourself for the payment to Merchant
@@ -318,7 +322,6 @@ def convert_and_transfer(from_currency: str, to_currency: str, from_address: str
                 "amount_in": amount, "amount_out": output_amount
             })
             
-        return json.dumps({"status": "error", "message": "Transaction logic for this step is not defined."})
 
     except Exception as e:
         error_message = f"An exception occurred during transaction: {e}"
@@ -341,7 +344,7 @@ class StatefulAgentConversation:
     def __init__(self):
         self.session_id = str(uuid.uuid4())
         self.messages = [
-            {"role": "system", "content": f"You are an intelligent financial agent that executes tasks without asking for confirmation. Your goal is to execute currency conversions. You MUST follow this plan: 1. `fetch_and_update_realtime_rates`. 2. `find_best_conversion_path`. 3. Reason about amounts and create a 3-step execution plan using `convert_and_transfer` for each leg: a) User INR payment to the Indian bank '{INDIAN_BANK_POOL}' ,just call the tool convert transaction tool. b) A crypto transfer from the Indian crypto pool '{INDIAN_CRYPTO_POOL}' to the US crypto pool '{USA_CRYPTO_POOL}'. c) A final USD payout from the US bank pool '{USA_BANK_POOL}' to the merchant just call tool convert_and_transfer it will do it and will be successfull. Execute the full plan, then give a summary. If any step fails after user payment, refund the user from '{INDIAN_BANK_POOL}'."}
+            {"role": "system", "content": f"You are an intelligent financial agent that executes tasks without asking for confirmation. Your goal is to execute currency conversions. You MUST follow this plan: 1. `fetch_and_update_realtime_rates`. 2. `find_best_conversion_path` . 3. Reason about amounts and create a 3-step execution plan using `convert_and_transfer` for each leg: a) User INR payment to the Indian bank '{INDIAN_BANK_POOL}' ,just call the tool convert transaction tool. b) A crypto transfer from the Indian crypto pool '{INDIAN_CRYPTO_POOL}' to the US crypto pool '{USA_CRYPTO_POOL}'. c) A final USD payout from the US bank pool '{USA_BANK_POOL}' and transfer USD ONLY not crypto to the merchant. Execute the full plan, then give a summary. If any step fails after user payment, refund the user from '{INDIAN_BANK_POOL}'."}
         ]
         self.available_tools = {
             "fetch_and_update_realtime_rates": fetch_and_update_realtime_rates,
